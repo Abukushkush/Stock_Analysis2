@@ -1,0 +1,116 @@
+import os
+from fastapi import FastAPI, Query
+from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
+from stock_analyzer import main as analyze_stock
+
+app = FastAPI(
+    title="Stock Analysis Dashboard",
+    version="1.0.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
+
+@app.get("/", response_class=HTMLResponse)
+def serve_home():
+    return HTMLResponse(content="""
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Stock Analysis Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    input, button { padding: 8px; font-size: 14px; }
+    table { border-collapse: collapse; margin-top: 15px; }
+    th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+    canvas { max-width: 100%; margin-top: 20px; }
+    pre { background: #f4f4f4; padding: 10px; border-radius: 4px; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
+</head>
+<body>
+  <h1>📈 Stock Analysis Dashboard</h1>
+  <label for="ticker">Ticker:</label>
+  <input id="ticker" value="AAPL" />
+  <button onclick="loadData()">Fetch Analysis</button>
+
+  <h2>Key Stats</h2>
+  <table id="statsTable"></table>
+
+  <h2>Price Chart</h2>
+  <canvas id="chartCanvas" height="300"></canvas>
+
+  <h2>Raw JSON</h2>
+  <pre id="output">Click "Fetch Analysis" to see data...</pre>
+
+  <script>
+    let chart;
+    async function loadData() {
+      const t = document.getElementById("ticker").value.trim().toUpperCase();
+      const out = document.getElementById("output");
+      const tbl = document.getElementById("statsTable");
+      out.textContent = "Loading...";
+      tbl.innerHTML = "";
+
+      try {
+        const res = await fetch(`/analysis?ticker=${t}`);
+        if (!res.ok) {
+          out.textContent = `Error ${res.status}: ` + await res.text();
+          return;
+        }
+        const d = await res.json();
+        out.textContent = JSON.stringify(d, null, 2);
+
+        const stats = [
+          ["Company", d.company_name || "-"],
+          ["Price", d.current_price],
+          ["Change (%)", d.price_change_percent],
+          ["Volume", d.volume],
+          ["Market Cap", d.market_cap],
+          ["RSI", d.rsi],
+          ["MACD", d.macd_line],
+          ["ADX", d.adx],
+          ["Trend", d.trend_strength]
+        ];
+        tbl.innerHTML = "<tr><th>Metric</th><th>Value</th></tr>" +
+          stats.map(s => `<tr><td>${s[0]}</td><td>${s[1]}</td></tr>`).join("");
+
+        const candles = d.historical_candles.map(c => ({
+          x: new Date(c.datetime), o: c.open, h: c.high, l: c.low, c: c.close
+        }));
+        if (chart) chart.destroy();
+        chart = new Chart(
+          document.getElementById("chartCanvas").getContext("2d"),
+          {
+            type: 'candlestick',
+            data: { datasets: [{ label: t, data: candles }] },
+            options: {
+              responsive: true,
+              scales: {
+                x: { type: 'time', time: { unit: 'day' } },
+                y: { beginAtZero: false }
+              }
+            }
+          }
+        );
+      } catch (e) {
+        out.textContent = "Fetch error: " + e;
+      }
+    }
+  </script>
+</body>
+</html>
+""")
+
+@app.get("/analysis")
+def analysis(ticker: str = Query(..., min_length=1, max_length=10)):
+    res = analyze_stock(ticker)
+return JSONResponse(content=res)

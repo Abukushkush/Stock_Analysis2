@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Stock Analysis Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f4; }
+    h1 { text-align: center; }
+    #controls { text-align: center; margin-bottom: 20px; }
+    input { padding: 8px; width: 300px; }
+    button { padding: 8px 15px; margin-left: 5px; }
+    table { width: 100%; border-collapse: collapse; background: white; }
+    th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }
+    th { background: #333; color: white; }
+    .BUY { color: green; font-weight: bold; }
+    .SELL { color: red; font-weight: bold; }
+    .HOLD { color: orange; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>📈 Stock Analysis Dashboard</h1>
+  <div id="controls">
+    <input type="text" id="tickers" placeholder="Enter tickers e.g. AAPL,MSFT,TSLA" />
+    <button onclick="fetchData()">Get Data</button>
+  </div>
+  <table id="results">
+    <thead>
+      <tr>
+        <th>Company</th>
+        <th>Price</th>
+        <th>SMA 20</th>
+        <th>RSI</th>
+        <th>Signal</th>
+        <th>Change %</th>
+        <th>Volume</th>
+        <th>Market Cap</th>
+        <th>MACD</th>
+        <th>ADX</th>
+        <th>Trend</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    async function fetchData() {
+      const tickers = document.getElementById('tickers').value.trim();
+      if (!tickers) {
+        alert("Please enter at least one ticker symbol.");
+        return;
+      }
+      try {
+        const res = await fetch(`/analysis?tickers=${encodeURIComponent(tickers)}`);
+        const data = await res.json();
+        renderTable(Array.isArray(data) ? data : [data]);
+      } catch (err) {
+        console.error(err);
+        alert("Error fetching data. Check console for details.");
+      }
+    }
+
+    function renderTable(stocks) {
+      const tbody = document.querySelector("#results tbody");
+      tbody.innerHTML = "";
+      stocks.forEach(stock => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${stock.company || "-"}</td>
+          <td>${stock.price?.toFixed(2) ?? "-"}</td>
+          <td>${stock.sma_20?.toFixed(2) ?? "-"}</td>
+          <td>${stock.rsi?.toFixed(2) ?? "-"}</td>
+          <td class="${stock.signal || ''}">${stock.signal || "-"}</td>
+          <td>${stock.change_percent != null ? stock.change_percent.toFixed(2) + "%" : "-"}</td>
+          <td>${stock.volume ?? "-"}</td>
+          <td>${stock.market_cap ?? "-"}</td>
+          <td>${stock.macd?.toFixed(2) ?? "-"}</td>
+          <td>${stock.adx?.toFixed(2) ?? "-"}</td>
+          <td>${stock.trend || "-"}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+  </script>
+</body>
+</html>
