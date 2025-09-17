@@ -10,3 +10,8 @@ uvicorn[standard]>=0.29
 # Utilities
 requests>=2.31
 python-dotenv>=1.0
+
+# Optional: uncomment if your code uses them
+# yfinance>=0.2
+# matplotlib>=3.8
+# scipy>=1.11
