@@ -1,46 +1,51 @@
-import os
 from fastapi import FastAPI, Query
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from stock_analyzer import main as analyze_stock  # Make sure this folder exists in your repo
+import os
+import requests
 
-app = FastAPI(
-    title="Stock Analysis API",
-    version="1.0",
-    description="Backend for multi-ticker stock dashboard"
-)
+app = FastAPI()
 
-# Allow cross-origin requests (so your frontend can call the API)
+# Allow CORS for all origins (you can restrict to your Base44 domain later)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
-@app.get("/analysis")
-def get_analysis(tickers: str = Query("AAPL", description="Comma-separated stock tickers")):
-    """
-    Returns analysis for one or more comma-separated tickers.
-    Example: /analysis?tickers=AAPL,MSFT
-    """
+# Health check for API key
+@app.get("/check_key")
+def check_key():
+    key = os.getenv("TWELVEDATA_API_KEY")
+    return {
+        "key_loaded": bool(key),
+        "key_length": len(key) if key else 0
+    }
+
+# Example endpoint to fetch stock data from Twelve Data
+@app.get("/stock")
+def get_stock(symbol: str = Query(..., description="Stock ticker symbol, e.g., AAPL")):
+    api_key = os.getenv("TWELVEDATA_API_KEY")
+    if not api_key:
+        return {"error": "Twelve Data API key not found in environment variables."}
+
+    url = f"https://api.twelvedata.com/time_series"
+    params = {
+        "symbol": symbol,
+        "interval": "1min",
+        "apikey": api_key
+    }
+
     try:
-        ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
-        results = [analyze_stock(t) for t in ticker_list]
-        return JSONResponse(content=results)
-    except Exception as e:
-        return JSONResponse(
-            content={"error": f"Error processing tickers {tickers}: {str(e)}"},
-            status_code=500
-        )
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        return data
+    except requests.exceptions.RequestException as e:
+        return {"error": str(e)}
 
-@app.get("/health")
-def health():
-    """Simple health check endpoint."""
-    return {"status": "ok"}
-
-# Serve static HTML dashboard if the 'static' folder exists
-if os.path.isdir("static"):
-    app.mount("/", StaticFiles(directory="static", html=True), name="static")
+# Root endpoint
+@app.get("/")
+def root():
+    return {"message": "Stock Analysis API is running"}
