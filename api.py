@@ -1,51 +1,38 @@
-from fastapi import FastAPI, Query
-from fastapi.middleware.cors import CORSMiddleware
 import os
-import requests
+from fastapi import FastAPI, Query, HTTPException
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from stock_analyzer import main as analyze_stock
 
-app = FastAPI()
-
-# Allow CORS for all origins (you can restrict to your Base44 domain later)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+app = FastAPI(
+    title="Stock Analysis Dashboard API", # Changed title to reflect API focus
+    version="1.0.0"
 )
 
-# Health check for API key
-@app.get("/check_key")
-def check_key():
-    key = os.getenv("TWELVEDATA_API_KEY")
-    return {
-        "key_loaded": bool(key),
-        "key_length": len(key) if key else 0
-    }
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for now, for easier testing. Consider tightening in production.
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
-# Example endpoint to fetch stock data from Twelve Data
-@app.get("/stock")
-def get_stock(symbol: str = Query(..., description="Stock ticker symbol, e.g., AAPL")):
-    api_key = os.getenv("TWELVEDATA_API_KEY")
-    if not api_key:
-        return {"error": "Twelve Data API key not found in environment variables."}
+# Removed the @app.get("/", response_class=HTMLResponse) endpoint
+# This simplifies the API and focuses it on data, reducing potential conflicts.
 
-    url = f"https://api.twelvedata.com/time_series"
-    params = {
-        "symbol": symbol,
-        "interval": "1min",
-        "apikey": api_key
-    }
+@app.get("/analysis")
+def analysis_endpoint(ticker: str = Query(..., min_length=1, max_length=10)):
+    # Call the main analysis function
+    analysis_result = analyze_stock(ticker)
 
-    try:
-        resp = requests.get(url, params=params, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        return data
-    except requests.exceptions.RequestException as e:
-        return {"error": str(e)}
+    # If the analysis_result contains an error status, return an HTTPException
+    if analysis_result.get("status") == "error":
+        # Raise an HTTPException with a 400 Bad Request or 500 Internal Server Error
+        # depending on the nature of the error
+        if "TWELVEDATA_API_KEY" in analysis_result["message"] or "network error" in analysis_result["message"].lower():
+            raise HTTPException(status_code=500, detail=analysis_result["message"])
+        else:
+            raise HTTPException(status_code=400, detail=analysis_result["message"])
 
-# Root endpoint
-@app.get("/")
-def root():
-    return {"message": "Stock Analysis API is running"}
+    # Otherwise, return the successful analysis result
+    return JSONResponse(content=analysis_result)
